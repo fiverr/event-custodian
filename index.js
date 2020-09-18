@@ -38,7 +38,11 @@ module.exports = class Custodian {
                 if (errors.length) {
 
                     // avoid unhandledRejection loop if no handler was registered
-                    if (/unhandledRejection/i.test(name) && this.events.listenerCount('error') === 0) {
+                    if (
+                        emitter === process &&
+                        /unhandledRejection/i.test(name) &&
+                        this.events.listenerCount('error') === 0
+                    ) {
                         this.events.on('error', (error) => console.error(error));
                     }
 
