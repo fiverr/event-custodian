@@ -1,0 +1,73 @@
+defaults: &defaults
+  working_directory: ~/app
+  docker:
+    - image: circleci/node:14
+
+version: 2.1
+jobs:
+  test:
+    <<: *defaults
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: npm i
+      - run:
+          name: Run tests
+          command: npm t
+      - run:
+          name: Code linting
+          command: npm run lint -- --plugin log
+    test_node_10:
+        <<: *defaults
+        docker:
+          - image: circleci/node:10
+        steps:
+          - checkout
+          - run:
+              name: Install dependencies
+              command: npm i
+          - run:
+              name: Run tests
+              command: npm t
+  publish:
+    <<: *defaults
+    steps:
+      - checkout
+      - run:
+          name: Set npmrc credentials
+          command: echo -e $NPMRC > ~/.npmrc
+      - run:
+          name: Publish to NPM
+          command: npx published --git-tag --testing
+  glossary:
+    <<: *defaults
+    steps:
+      - run:
+          name: Add to Glossary
+          command: |
+            curl --user ${CIRCLECI_API_TOKEN}: \
+              --header "Content-Type: application/json" \
+              --data "{\"build_parameters\":{\"TRIGGERING_REPOSITORY\":\"${CIRCLE_REPOSITORY_URL}\"}}" \
+              --request POST \
+              https://circleci.com/api/v1.1/project/github/fiverr/glossary/tree/master
+
+workflows:
+  version: 2.1
+  ci-cd:
+    jobs:
+      - test
+      - test_node_10
+      - publish:
+          context: org-global
+          requires:
+            - test
+            - test_node_10
+      - glossary:
+          context: org-global
+          requires:
+            - publish
+          filters:
+            branches:
+              only:
+                - master
