@@ -18,18 +18,18 @@ jobs:
       - run:
           name: Code linting
           command: npm run lint -- --plugin log
-    test_node_10:
-        <<: *defaults
-        docker:
-          - image: circleci/node:10
-        steps:
-          - checkout
-          - run:
-              name: Install dependencies
-              command: npm i
-          - run:
-              name: Run tests
-              command: npm t
+  test_node_10:
+    <<: *defaults
+    docker:
+      - image: circleci/node:10
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+            command: npm i
+      - run:
+          name: Run tests
+          command: npm t
   publish:
     <<: *defaults
     steps:
