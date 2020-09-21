@@ -5,6 +5,20 @@ const existing = [];
 const results = [];
 const errors = [];
 
+/**
+ * Create an EventEmitter with two listeners on type 'event'
+ * @returns {EventEmitter}
+ */
+function basic() {
+    const emitter = new EventEmitter();
+    emitter.on('event', () => results.push('one'));
+    emitter.on('event', () => results.push('two'));
+
+    const custodian = new Custodian(emitter, 'event').mount();
+
+    return { emitter, custodian };
+}
+
 describe('event-custodian', () => {
     beforeAll(
         () => existing.push(...process.listeners('unhandledRejection'))
@@ -40,75 +54,158 @@ describe('event-custodian', () => {
         expect(console.error).toBeCalledWith(error);
     });
 
-    test('add event handler first', () => {
-        const emitter = new EventEmitter();
-        emitter.on('event', () => results.push('I am here'));
-        emitter.on('event', () => results.push('And I am also here'));
-
-        new Custodian(emitter, 'event').mount();
-        emitter.prependListener('event', () => results.push('I am first'));
-
+    test('prepend event handler', () => {
+        const { emitter } = basic();
+        emitter.prependListener('event', () => results.push('three'));
         emitter.emit('event');
         expect(results).toEqual([
-            'I am first',
-            'I am here',
-            'And I am also here'
+            'three', 'one', 'two'
+        ]);
+        emitter.emit('event');
+        expect(results).toEqual([
+            'three', 'one', 'two',
+            'three', 'one', 'two'
         ]);
     });
 
-    test('add event handler last', () => {
-        const emitter = new EventEmitter();
-        emitter.on('event', () => results.push('I am here'));
-        emitter.on('event', () => results.push('And I am also here'));
-
-        new Custodian(emitter, 'event').mount();
-        emitter.on('event', () => results.push('I am last'));
-
+    test('append event handler', () => {
+        const { emitter } = basic();
+        emitter.on('event', () => results.push('three'));
         emitter.emit('event');
         expect(results).toEqual([
-            'I am here',
-            'And I am also here',
-            'I am last'
+            'one', 'two', 'three'
+        ]);
+        emitter.emit('event');
+        expect(results).toEqual([
+            'one', 'two', 'three',
+            'one', 'two', 'three'
+        ]);
+    });
+
+    test('remove event handler', () => {
+        const { emitter } = basic();
+        const handler = () => results.push('three')
+        emitter.on('event', handler);
+        emitter.emit('event');
+        expect(results).toEqual([
+            'one', 'two', 'three'
+        ]);
+        emitter.off('event', handler);
+        emitter.emit('event');
+        expect(results).toEqual([
+            'one', 'two', 'three',
+            'one', 'two'
+        ]);
+    });
+
+    test('and and remove event handler with addListener and removeListener', () => {
+        const { emitter } = basic();
+        const handler = () => results.push('three')
+        emitter.addListener('event', handler);
+        emitter.emit('event');
+        expect(results).toEqual([
+            'one', 'two', 'three'
+        ]);
+        emitter.removeListener('event', handler);
+        emitter.emit('event');
+        expect(results).toEqual([
+            'one', 'two', 'three',
+            'one', 'two'
+        ]);
+    });
+
+    test('append event handler once', () => {
+        const { emitter } = basic();
+        emitter.on('event', () => results.push('three'), { once: true });
+        emitter.emit('event');
+        expect(results).toEqual([
+            'one', 'two', 'three'
+        ]);
+        emitter.emit('event');
+        expect(results).toEqual([
+            'one', 'two', 'three',
+            'one', 'two'
+        ]);
+    });
+
+    xtest('prepend event handler once', () => {
+        const { emitter } = basic();
+        emitter.prependListener('event', () => results.push('three'), { once: true });
+        emitter.emit('event');
+        expect(results).toEqual([
+            'three', 'one', 'two'
+        ]);
+        emitter.emit('event');
+        expect(results).toEqual([
+            'three', 'one', 'two',
+            'one', 'two'
+        ]);
+    });
+
+    xtest('prependOnce event handler', () => {
+        const { emitter } = basic();
+        emitter.prependOnceListener('event', () => results.push('three'));
+        emitter.emit('event');
+        expect(results).toEqual([
+            'three', 'one', 'two'
+        ]);
+        emitter.emit('event');
+        expect(results).toEqual([
+            'three', 'one', 'two',
+            'one', 'two'
+        ]);
+    });
+
+    test('remove all listeners', () => {
+        const { emitter } = basic();
+        emitter.emit('event');
+        expect(results).toEqual([
+            'one', 'two'
+        ]);
+        emitter.removeAllListeners('event');
+        emitter.emit('event');
+        expect(results).toEqual([
+            'one', 'two'
+        ]);
+    });
+
+    test('pass arguments to event', () => {
+        const emitter = new EventEmitter();
+        emitter.on('event', (...args) => results.push(...args));
+        new Custodian(emitter, 'event').mount();
+        emitter.emit('event', 'one', 'two', 'three');
+        expect(results).toEqual([
+            'one', 'two', 'three'
         ]);
     });
 
     test('new handlers are pulled into the custodian', async() => {
-        const emitter = new EventEmitter();
-        emitter.on('event', () => results.push('I am here'));
-        emitter.on('event', () => results.push('And I am also here'));
-        new Custodian(emitter, 'event').mount();
-
-        emitter.on('event', () => results.push('And finally, we were three'));
+        const { emitter } = basic();
+        emitter.on('event', () => results.push('three'));
         expect(emitter.listeners('event')).toHaveLength(1);
+    });
 
+    test('unmount custodian', async() => {
+        const emitter = new EventEmitter();
+        emitter.on('event', () => results.push('one'));
+        emitter.on('event', () => results.push('two'));
+        expect(emitter.listeners('event')).toHaveLength(2);
+        const custodian = new Custodian(emitter, 'event').mount();
+        expect(emitter.listeners('event')).toHaveLength(1);
+        custodian.unmount();
+        expect(emitter.listeners('event')).toHaveLength(2);
         emitter.emit('event');
         expect(results).toEqual([
-            'I am here',
-            'And I am also here',
-            'And finally, we were three'
+            'one', 'two'
         ]);
     });
 
-    test('purge all existing listeners', () => {
-        const emitter = new EventEmitter();
-        emitter.on('event', () => results.push('I am here'));
-        emitter.on('event', () => results.push('And I am also here'));
-        new Custodian(emitter, 'event');
-        emitter.removeAllListeners('event');
-
-        emitter.emit('event');
-        expect(results).toHaveLength(0);
-    });
-
     test('handlers isolation, errors are caught and reported', () => {
-        const emitter = new EventEmitter();
-        emitter.on('event', () => results.push('I am here'));
-        emitter.on('event', () => results.push('And I am also here'));
+        const { emitter, custodian } = basic();
         emitter.on('event', () => {
             throw new Error('Something must have gone horribly wrong');
         });
-        emitter.on('event', () => results.push('And finally, we were three'));
-        const custodian = new Custodian(emitter, 'event').mount();
+        emitter.on('event', () => results.push('three'));
         custodian.on('error', (error) => {
             expect(error.message).toBe('Something must have gone horribly wrong');
             errors.push(error);
@@ -116,9 +213,9 @@ describe('event-custodian', () => {
 
         emitter.emit('event');
         expect(results).toEqual([
-            'I am here',
-            'And I am also here',
-            'And finally, we were three'
+            'one',
+            'two',
+            'three'
         ]);
         expect(errors).toHaveLength(1);
     });
@@ -168,8 +265,8 @@ describe('event-custodian', () => {
 
     test('function chaining', () => {
         const emitter = new EventEmitter();
-        emitter.on('event', () => results.push('I am here'));
-        emitter.on('event', () => results.push('And I am also here'));
+        emitter.on('event', () => results.push('I am here'))
+            .on('event', () => results.push('And I am also here'));
         new Custodian(emitter, 'event').mount();
 
         emitter.removeAllListeners('event')

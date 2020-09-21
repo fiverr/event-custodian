@@ -124,21 +124,21 @@ module.exports = class Custodian {
         this.override({
             aliases: [ 'prependOnceListener' ],
             implementation: (type, handler) => {
-                function onceHandler(...args) {
-                    this.emitter.removeListener(onceHandler);
+                const onceHandler = (...args) => {
+                    this.emitter.removeListener(this.type, onceHandler);
                     handler.apply(this, args);
-                }
-                this.handlers.unshift(onceHandler);
+                };
+                this.emitter.prependListener(this.type, onceHandler);
             }
         });
 
         this.override({
             aliases: [ 'once' ],
             implementation: (type, handler) => {
-                function onceHandler(...args) {
-                    this.emitter.removeListener(onceHandler);
+                const onceHandler = (...args) => {
+                    this.emitter.removeListener(this.type, onceHandler);
                     handler.apply(this, args);
-                }
+                };
                 this.handlers.push(onceHandler);
             }
         });
@@ -172,7 +172,7 @@ module.exports = class Custodian {
                 this.emitter[alias] = (...args) => {
                     const [ type ] = args;
                     if (type !== this.type) {
-                        return this.mounted[alias].apply(this.emitter, args);
+                        return this.mounted[alias].call(this.emitter, this.type, ...args);
                     }
                     implementation.apply(this, args);
                     return this.emitter;
