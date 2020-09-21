@@ -1,5 +1,4 @@
 const EventEmitter = require('events');
-const wait = require('@lets/wait');
 const Custodian = require('.');
 
 const existing = [];
@@ -28,7 +27,7 @@ describe('event-custodian', () => {
         process.on('unhandledRejection', () => results.push('I am here'));
         process.on('unhandledRejection', () => results.push('And I am also here'));
         expect(process.listeners('unhandledRejection')).toHaveLength(existing.length + 2);
-        new Custodian(process, 'unhandledRejection');
+        new Custodian(process, 'unhandledRejection').mount();
         expect(process.listeners('unhandledRejection')).toHaveLength(1);
     });
 
@@ -46,8 +45,8 @@ describe('event-custodian', () => {
         emitter.on('event', () => results.push('I am here'));
         emitter.on('event', () => results.push('And I am also here'));
 
-        const custodian = new Custodian(emitter, 'event');
-        custodian.prepend(() => results.push('I am first'));
+        new Custodian(emitter, 'event').mount();
+        emitter.prependListener('event', () => results.push('I am first'));
 
         emitter.emit('event');
         expect(results).toEqual([
@@ -62,8 +61,8 @@ describe('event-custodian', () => {
         emitter.on('event', () => results.push('I am here'));
         emitter.on('event', () => results.push('And I am also here'));
 
-        const custodian = new Custodian(emitter, 'event');
-        custodian.append(() => results.push('I am last'));
+        new Custodian(emitter, 'event').mount();
+        emitter.on('event', () => results.push('I am last'));
 
         emitter.emit('event');
         expect(results).toEqual([
@@ -77,11 +76,9 @@ describe('event-custodian', () => {
         const emitter = new EventEmitter();
         emitter.on('event', () => results.push('I am here'));
         emitter.on('event', () => results.push('And I am also here'));
-        new Custodian(emitter, 'event');
+        new Custodian(emitter, 'event').mount();
 
         emitter.on('event', () => results.push('And finally, we were three'));
-        expect(emitter.listeners('event')).toHaveLength(2);
-        await wait(10);
         expect(emitter.listeners('event')).toHaveLength(1);
 
         emitter.emit('event');
@@ -96,8 +93,8 @@ describe('event-custodian', () => {
         const emitter = new EventEmitter();
         emitter.on('event', () => results.push('I am here'));
         emitter.on('event', () => results.push('And I am also here'));
-        const custodian = new Custodian(emitter, 'event');
-        custodian.purge();
+        new Custodian(emitter, 'event');
+        emitter.removeAllListeners('event');
 
         emitter.emit('event');
         expect(results).toHaveLength(0);
@@ -111,7 +108,7 @@ describe('event-custodian', () => {
             throw new Error('Something must have gone horribly wrong');
         });
         emitter.on('event', () => results.push('And finally, we were three'));
-        const custodian = new Custodian(emitter, 'event');
+        const custodian = new Custodian(emitter, 'event').mount();
         custodian.on('error', (error) => {
             expect(error.message).toBe('Something must have gone horribly wrong');
             errors.push(error);
@@ -131,7 +128,7 @@ describe('event-custodian', () => {
         emitter.on('event', () => {
             throw new Error('Something must have gone horribly wrong');
         });
-        new Custodian(emitter, 'event');
+        new Custodian(emitter, 'event').mount();
         expect(() => emitter.emit('event')).toThrow();
         try {
             emitter.emit('event');
@@ -147,7 +144,7 @@ describe('event-custodian', () => {
         emitter.on('event', () => {
             throw new Error('Something must have gone horribly wrong');
         });
-        const custodian = new Custodian(emitter, 'event');
+        const custodian = new Custodian(emitter, 'event').mount();
         custodian.on('error', (error) => errors.push(error));
 
         emitter.emit('event');
@@ -173,11 +170,11 @@ describe('event-custodian', () => {
         const emitter = new EventEmitter();
         emitter.on('event', () => results.push('I am here'));
         emitter.on('event', () => results.push('And I am also here'));
-        new Custodian(emitter, 'event')
-            .purge()
-            .on('error', () => null)
-            .append(() => results.push('I am last'))
-            .prepend(() => results.push('I am first'))
+        new Custodian(emitter, 'event').mount();
+
+        emitter.removeAllListeners('event')
+            .on('event', () => results.push('I am last'))
+            .prependListener('event', () => results.push('I am first'))
         ;
 
         emitter.emit('event');

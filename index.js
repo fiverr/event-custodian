@@ -2,104 +2,184 @@ const EventEmitter = require('events');
 
 /**
 * Remove all listerners from an event emitter by type
-* @property {array} handlers Collection of functions to execute when event is fired
-* @property {EventEmitter} events The EventEmitter we monitor
+* @property {EventEmitter}  emitter The EventEmitter we monitor
+* @property {string|symbol} type Event type
+* @property {EventEmitter}  events Internal custodian instance events
+* @property {function[]}    handlers Collection of functions to execute when event is fired
+* @property {<string, function>{}} mounted Named collection of original emitter functions
 * @returns {Custodian}
 */
 module.exports = class Custodian {
 
     /**
      * @param {EventEmitter} emitter
-     * @param {string|symbol} name The name of the event being listened for
+     * @param {string|symbol} type The name of the event being listened for
      */
-    constructor(emitter, name) {
-        this.handlers = emitter.listeners(name);
+    constructor(emitter, type) {
+        this.emitter = emitter;
+        this.type = type;
         this.events = new EventEmitter();
+        this.handler = (...args) => {
+            const errors = [];
+
+            // Run each handler in it's own quarantine. Collect errors
+            this.handlers.forEach(
+                (handler) => {
+                    try {
+                        handler.apply(this.emitter, args);
+                    } catch (error) {
+                        errors.push(error);
+                    }
+                }
+            );
+            if (errors.length) {
+
+                // avoid unhandledRejection loop if no handler was registered
+                if (
+                    this.emitter === process &&
+                    /unhandledRejection/i.test(this.type) &&
+                    this.events.listenerCount('error') === 0
+                ) {
+                    this.events.on('error', (error) => console.error(error));
+                }
+
+                // Running over all handlers for each error O(n²)
+                errors.forEach(
+                    (error) => this.events.emit('error', error)
+                );
+            }
+        };
+    }
+
+    /**
+     * Reinstate original event listener
+     * @returns {self}
+     */
+    unmount() {
+        if (!this.mounted) {
+            return this;
+        }
+
+        Object.entries(this.mounted).forEach(
+            ([ key, value ]) => {
+                this.emitter[key] = value;
+                delete this.mounted[key];
+            }
+        );
+        delete this.mounted;
+
+        this.emitter.removeListener(
+            this.type,
+            this.handler
+        );
+
+        // Re attach to emitter as individual event handlers
+        this.handlers.forEach(
+            (handler) => this.emitter.on(this.type, handler)
+        );
+
+        return this;
+    }
+
+    /**
+     * Override organic event listeners
+     * @returns {self}
+     */
+    mount() {
+        if (this.mounted) {
+            return this;
+        }
+        this.handlers = this.emitter.listeners(this.type);
+        this.mounted = {};
 
         // Remove all existing listeners
-        emitter.removeAllListeners(name);
+        this.emitter.removeAllListeners(this.type);
 
-        // Set our own listener which controls the handlers execution
-        emitter.on(
-            name,
-            (...args) => {
-                const errors = [];
-
-                // Run each handler in it's own quarantine. Collect errors
-                this.handlers.forEach(
-                    (handler) => {
-                        try {
-                            handler.apply(emitter, args);
-                        } catch (error) {
-                            errors.push(error);
-                        }
-                    }
-                );
-                if (errors.length) {
-
-                    // avoid unhandledRejection loop if no handler was registered
-                    if (
-                        emitter === process &&
-                        /unhandledRejection/i.test(name) &&
-                        this.events.listenerCount('error') === 0
-                    ) {
-                        this.events.on('error', (error) => console.error(error));
-                    }
-
-                    // Running over all handlers for each error O(n²)
-                    errors.forEach(
-                        (error) => this.events.emit('error', error)
-                    );
-                }
-            }
+        // Engulf existing listener which controls the handlers execution
+        this.emitter.on(
+            this.type,
+            this.handler
         );
 
-        // Monitor for future listener subscriptions
-        emitter.on(
-            'newListener',
-            (event, handler) => {
-                if (event === name) {
-
-                    // Here we are being notified that this will be attached, however, it is not yet attached until poll stage, and then we'll pick it up
-                    setImmediate(() => {
-
-                        // Add to handlers
-                        this.append(handler);
-
-                        // Remove as independent listener
-                        emitter.removeListener(event, handler);
-                    });
-                }
+        this.override({
+            aliases: [ 'addListener', 'on' ],
+            implementation: (type, handler, { once } = {}) => {
+                once
+                    ? this.emitter.once(type, handler)
+                    : this.handlers.push(handler)
+                ;
             }
-        );
-    }
+        });
 
-    /**
-     * Add handler at the top of the stack (first)
-     * @param {function} handler The event handler function
-     * @returns {self}
-     */
-    prepend(handler) {
-        this.handlers.unshift(handler);
+        this.override({
+            aliases: [ 'prependListener' ],
+            implementation: (type, handler, { once } = {}) => {
+                once
+                    ? this.emitter.prependOnceListener(type, handler)
+                    : this.handlers.unshift(handler)
+                ;
+            }
+        });
+
+        this.override({
+            aliases: [ 'prependOnceListener' ],
+            implementation: (type, handler) => {
+                function onceHandler(...args) {
+                    this.emitter.removeListener(onceHandler);
+                    handler.apply(this, args);
+                }
+                this.handlers.unshift(onceHandler);
+            }
+        });
+
+        this.override({
+            aliases: [ 'once' ],
+            implementation: (type, handler) => {
+                function onceHandler(...args) {
+                    this.emitter.removeListener(onceHandler);
+                    handler.apply(this, args);
+                }
+                this.handlers.push(onceHandler);
+            }
+        });
+
+        this.override({
+            aliases: [ 'removeListener', 'off' ],
+            implementation: (type, handler) => {
+                const index = this.handlers.indexOf(handler);
+                this.handlers.splice(index, 1);
+            }
+        });
+
+        this.override({
+            aliases: [ 'removeAllListeners' ],
+            implementation: (/* type */) => {
+                this.handlers.length = 0;
+            }
+        });
+
         return this;
     }
 
     /**
-     * Add handler at the bottom of the stack (last)
-     * @param {function} handler The event handler function
+     * Override an organic event listener
      * @returns {self}
      */
-    append(handler) {
-        this.handlers.push(handler);
-        return this;
-    }
+    override({ aliases, implementation }) {
+        aliases.forEach(
+            (alias) => {
+                this.mounted[alias] = this.emitter[alias];
+                this.emitter[alias] = (...args) => {
+                    const [ type ] = args;
+                    if (type !== this.type) {
+                        return this.mounted[alias].apply(this.emitter, args);
+                    }
+                    implementation.apply(this, args);
+                    return this.emitter;
+                };
+            }
+        );
 
-    /**
-     * Remove all existing handlers for this event
-     * @returns {self}
-     */
-    purge() {
-        this.handlers.length = 0;
         return this;
     }
 
@@ -111,6 +191,7 @@ module.exports = class Custodian {
      */
     on(kind, handler) {
         this.events.on(kind, handler);
+
         return this;
     }
 
@@ -125,6 +206,7 @@ module.exports = class Custodian {
             ? this.events.removeListener(kind, handler)
             : this.events.removeAllListeners(kind)
         ;
+
         return this;
     }
 };

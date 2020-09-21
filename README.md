@@ -3,42 +3,36 @@
 
 ```js
 const Custodian = require('event-custodian');
+```
 
-// Reduce all existing listeners to one
+Reduce all existing listeners to one
+```js
 const custodian = new Custodian(process, 'unhandledRejection');
 ```
 
-Add a handler before all others
+Override event subscriptions
 ```js
-custodian.prepend(
-    (error) => process.stdout.write(
-        JSON.stringify(
-            error instanceof Error
-                ? { level: 'critical', message: error.message, stack: error.stack, code: error.code }
-                : { level: 'critical', message: `Unhandled rejection. Rejected with ${error}` }
-        )
-    )
-);
-```
-
-Add a handler last
-```js
-custodian.append(() => console.log('{"message":"I am also here"}'));
-```
-
-Normal event handlers will be append (on poll stage)
-```js
-process.on('unhandledRejection', (error) => logger.error(error));
-```
-
-Remove all existing handlers
-```js
-custodian.purge();
+custodian.mount();
 ```
 
 Handle errors coming up from registered handlers
 ```js
 custodian.on('error', (error) => logger.error(error));
 ```
+
+Add, prepend, remove event handlers as normal
+```js
+process.on('unhandledRejection', console.error)
+    .prepend('unhandledRejection', (error) => { ... })
+    .off('unhandledRejection', console.error)
+    .removeAllListeners('unhandledRejection');
+```
+Custodian is now managing the call stack
+
+Remove function override. Return all existing handlers as individual event handlers
+```js
+custodian.unmount();
+```
+
 ### Important note about 'unhandledRejection'
 If you use this application to manage 'unhandledRejection', you **must** set an on('error') handler. Otherwise the custodian will simply print the errors onto console.error.
