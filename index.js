@@ -19,68 +19,9 @@ module.exports = class Custodian {
         this.emitter = emitter;
         this.type = type;
         this.events = new EventEmitter();
-        this.handler = (...args) => {
-            const errors = [];
 
-            // Iterating a copy of the handlers guarantees any mutation of the handler collection
-            // will only take affect the next time this event is emitted
-            [ ...this.handlers ].forEach(
-                (handler) => {
-                    // Run each handler in it's own quarantine. Collect errors
-                    try {
-                        handler.apply(this.emitter, args);
-                    } catch (error) {
-                        errors.push(error);
-                    }
-                }
-            );
-            if (errors.length) {
-
-                // avoid unhandledRejection loop if no handler was registered
-                if (
-                    this.emitter === process &&
-                    /unhandledRejection/i.test(this.type) &&
-                    this.events.listenerCount('error') === 0
-                ) {
-                    this.events.on('error', (error) => console.error(error));
-                }
-
-                // Running over all handlers for each error O(n²)
-                errors.forEach(
-                    (error) => this.events.emit('error', error)
-                );
-            }
-        };
-    }
-
-    /**
-     * Reinstate native event listener
-     * @returns {self}
-     */
-    unmount() {
-        if (!this.mounted) {
-            return this;
-        }
-
-        Object.entries(this.mounted).forEach(
-            ([ key, value ]) => {
-                this.emitter[key] = value;
-                delete this.mounted[key];
-            }
-        );
-        delete this.mounted;
-
-        this.emitter.removeListener(
-            this.type,
-            this.handler
-        );
-
-        // Re attach to emitter as individual event handlers
-        this.handlers.forEach(
-            (handler) => this.emitter.on(this.type, handler)
-        );
-
-        return this;
+        // Replace prototype handler with an instance bound one
+        this.handler = this.handler.bind(this);
     }
 
     /**
@@ -88,16 +29,16 @@ module.exports = class Custodian {
      * @returns {self}
      */
     mount() {
-        if (this.mounted) {
-            return this;
-        }
-        this.handlers = this.emitter.listeners(this.type);
+        if (this.mounted) { return this; }
         this.mounted = {};
+
+        // Collect existing listeners
+        this.handlers = this.emitter.listeners(this.type);
 
         // Remove all existing listeners
         this.emitter.removeAllListeners(this.type);
 
-        // Engulf existing listener which controls the handlers execution
+        // Create our single listener which controls the handlers execution
         this.emitter.on(
             this.type,
             this.handler
@@ -164,7 +105,66 @@ module.exports = class Custodian {
     }
 
     /**
+     * Reinstate native event listener
+     * @returns {self}
+     */
+    unmount() {
+        if (!this.mounted) { return this; }
+
+        Object.entries(this.mounted).forEach(
+            ([ key, value ]) => {
+                this.emitter[key] = value;
+                delete this.mounted[key];
+            }
+        );
+        delete this.mounted;
+
+        this.emitter.removeListener(
+            this.type,
+            this.handler
+        );
+
+        // Re attach to emitter as individual event handlers
+        this.handlers.forEach(
+            (handler) => this.emitter.on(this.type, handler)
+        );
+
+        return this;
+    }
+
+    /**
+     * Add handler to this custodian
+     * @param {string} type      Event type to be triggered on the custodian instance
+     * @param {function} handler Error handler function
+     * @returns {self}
+     */
+    on(kind, handler) {
+        this.events.on(kind, handler);
+
+        return this;
+    }
+
+    /**
+     * Remove handler(s) from this custodian
+     * @param {string} type        Event type to be triggered on the custodian instance
+     * @param {function} [handler] Error handler function. When this argument is missing - all listeners will be removed
+     * @returns {self}
+     */
+    off(kind, handler) {
+        handler
+            ? this.events.removeListener(kind, handler)
+            : this.events.removeAllListeners(kind)
+        ;
+
+        return this;
+    }
+
+    // Not officially part of the interface
+
+    /**
      * Override an organic event listener
+     * @param {string[]} o.aliases        List of function names to override
+     * @param {function} o.implementation New functionality
      * @returns {self}
      */
     override({ aliases, implementation }) {
@@ -186,29 +186,39 @@ module.exports = class Custodian {
     }
 
     /**
-     * Add handler to this custodian
-     * @param {string} type self event type
-     * @param {function} handler Error handler function
+     * @param {...any}
      * @returns {self}
      */
-    on(kind, handler) {
-        this.events.on(kind, handler);
+    handler(...args) {
+
+        // Iterating a copy of the handlers guarantees any mutation of the handler collection
+        // will only take affect the next time this event is emitted
+        [ ...this.handlers ].forEach(
+            (handler) => {
+                // Run each handler in it's own quarantine. Collect errors
+                try {
+                    handler.apply(this.emitter, args);
+                } catch (error) {
+                    this.verifyErrorHandler();
+                    this.events.emit('error', error);
+                }
+            }
+        );
 
         return this;
     }
 
     /**
-     * Remove handler(s) to this custodian
-     * @param {string} type self event type
-     * @param {function} [handler] Error handler function
-     * @returns {self}
+     * Avoid unhandledRejection loop if no handler was registered
+     * @returns {void}
      */
-    off(kind, handler) {
-        handler
-            ? this.events.removeListener(kind, handler)
-            : this.events.removeAllListeners(kind)
-        ;
-
-        return this;
+    verifyErrorHandler() {
+        if (
+            this.emitter === process &&
+            /unhandledRejection/i.test(this.type) &&
+            this.events.listenerCount('error') === 0
+        ) {
+            this.events.on('error', (error) => console.error(error));
+        }
     }
 };

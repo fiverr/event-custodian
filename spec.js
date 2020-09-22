@@ -93,7 +93,7 @@ describe('event-custodian', () => {
         ];
         const emitter = new EventEmitter();
         handlers.forEach((handler) => emitter[add]('event', handler));
-        const custodian = new Custodian(emitter, 'event').mount();
+        new Custodian(emitter, 'event').mount();
         emitter.emit('event');
         expect(results).toEqual([
             'one', 'two', 'three'
