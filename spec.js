@@ -82,35 +82,27 @@ describe('event-custodian', () => {
         ]);
     });
 
-    test('remove event handler', () => {
-        const { emitter } = basic();
-        const handler = () => results.push('three')
-        emitter.on('event', handler);
+    test.each([
+        [ 'on', 'off' ],
+        [ 'addListener', 'removeListener' ]
+    ])('Add and remove listeners using %s and %s', (add, remove) => {
+        const handlers = [
+            () => results.push('one'),
+            () => results.push('two'),
+            () => results.push('three')
+        ];
+        const emitter = new EventEmitter();
+        handlers.forEach((handler) => emitter[add]('event', handler));
+        const custodian = new Custodian(emitter, 'event').mount();
         emitter.emit('event');
         expect(results).toEqual([
             'one', 'two', 'three'
         ]);
-        emitter.off('event', handler);
+        emitter[remove]('event', handlers[1]);
         emitter.emit('event');
         expect(results).toEqual([
             'one', 'two', 'three',
-            'one', 'two'
-        ]);
-    });
-
-    test('and and remove event handler with addListener and removeListener', () => {
-        const { emitter } = basic();
-        const handler = () => results.push('three')
-        emitter.addListener('event', handler);
-        emitter.emit('event');
-        expect(results).toEqual([
-            'one', 'two', 'three'
-        ]);
-        emitter.removeListener('event', handler);
-        emitter.emit('event');
-        expect(results).toEqual([
-            'one', 'two', 'three',
-            'one', 'two'
+            'one', 'three'
         ]);
     });
 
@@ -128,7 +120,7 @@ describe('event-custodian', () => {
         ]);
     });
 
-    xtest('prepend event handler once', () => {
+    test('prepend event handler once', () => {
         const { emitter } = basic();
         emitter.prependListener('event', () => results.push('three'), { once: true });
         emitter.emit('event');
@@ -142,7 +134,7 @@ describe('event-custodian', () => {
         ]);
     });
 
-    xtest('prependOnce event handler', () => {
+    test('prependOnce event handler', () => {
         const { emitter } = basic();
         emitter.prependOnceListener('event', () => results.push('three'));
         emitter.emit('event');

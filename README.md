@@ -10,7 +10,7 @@ Reduce all existing listeners to one
 const custodian = new Custodian(process, 'unhandledRejection');
 ```
 
-Override event subscriptions
+Override native event subscription functions
 ```js
 custodian.mount();
 ```
@@ -29,7 +29,7 @@ process.on('unhandledRejection', console.error)
 ```
 Custodian is now managing the call stack
 
-Remove function override. Return all existing handlers as individual event handlers
+Revert to native subscription functions (remove override). Reinstate all existing handlers as individual event handlers
 ```js
 custodian.unmount();
 ```

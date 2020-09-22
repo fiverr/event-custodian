@@ -6,7 +6,7 @@ const EventEmitter = require('events');
 * @property {string|symbol} type Event type
 * @property {EventEmitter}  events Internal custodian instance events
 * @property {function[]}    handlers Collection of functions to execute when event is fired
-* @property {<string, function>{}} mounted Named collection of original emitter functions
+* @property {<string, function>{}} mounted Named collection of native emitter functions
 * @returns {Custodian}
 */
 module.exports = class Custodian {
@@ -22,9 +22,11 @@ module.exports = class Custodian {
         this.handler = (...args) => {
             const errors = [];
 
-            // Run each handler in it's own quarantine. Collect errors
-            this.handlers.forEach(
+            // Iterating a copy of the handlers guarantees any mutation of the handler collection
+            // will only take affect the next time this event is emitted
+            [ ...this.handlers ].forEach(
                 (handler) => {
+                    // Run each handler in it's own quarantine. Collect errors
                     try {
                         handler.apply(this.emitter, args);
                     } catch (error) {
@@ -52,7 +54,7 @@ module.exports = class Custodian {
     }
 
     /**
-     * Reinstate original event listener
+     * Reinstate native event listener
      * @returns {self}
      */
     unmount() {
