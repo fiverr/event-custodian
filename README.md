@@ -23,7 +23,7 @@ custodian.on('error', (error) => logger.error(error));
 Add, prepend, remove event handlers as normal
 ```js
 process.on('unhandledRejection', console.error)
-    .prepend('unhandledRejection', (error) => { ... })
+    .prependListener('unhandledRejection', (error) => { ... })
     .off('unhandledRejection', console.error)
     .removeAllListeners('unhandledRejection');
 ```
