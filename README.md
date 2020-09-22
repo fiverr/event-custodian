@@ -4,23 +4,19 @@ Control handlers for an event set on an [EventEmitter](https://nodejs.org/api/ev
 
 ## Usage
 
+### TL;DR
 ```js
 const Custodian = require('event-custodian');
+new Custodian(emitter, 'event').mount().on('error', (error) => logger.error(error));
+
+// Example: Avoid errors in events that can cause the process to exit with SIGTERM
+new Custodian(process, 'unhandledRejection').mount().on('error', (error) => console.error(error));
 ```
 
-## TL;DR
-```
-new Custodian(emitter, 'event').mount().on('error', (error) => logger.error(error());
-
-// Avoid errors in events that can cause the process to exit with SIGTERM
-new Custodian(process, 'unhandledRejection').mount().on('error', (error) => logger.error(error());
-```
-
-## Reason
+## Motivation
 By overriding native behaviour we can verify existing event handlers run in a safe environment, within a try/catch block. This way we can avoid unexpected results, such as the process exiting unexpectedly within an event handler. We can later decide how we want to handle these errors by placing a general onerror handler on the custodian.
 
 ## Detailed example using process and "unhandledRejection"
-
 ```js
 // Reduce all existing listeners to one
 const custodian = new Custodian(process, 'unhandledRejection');
