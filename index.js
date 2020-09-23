@@ -171,12 +171,11 @@ module.exports = class Custodian {
         aliases.forEach(
             (alias) => {
                 this.mounted[alias] = this.emitter[alias];
-                this.emitter[alias] = (...args) => {
-                    const [ type ] = args;
+                this.emitter[alias] = (type, ...args) => {
                     if (type !== this.type) {
                         return this.mounted[alias].call(this.emitter, this.type, ...args);
                     }
-                    implementation.apply(this, args);
+                    implementation.call(this, type, ...args);
                     return this.emitter;
                 };
             }

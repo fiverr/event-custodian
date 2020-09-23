@@ -38,8 +38,8 @@ describe('event-custodian', () => {
 
     test('replace all event listeners with one', () => {
         expect(process.listeners('unhandledRejection')).toHaveLength(existing.length);
-        process.on('unhandledRejection', () => results.push('I am here'));
-        process.on('unhandledRejection', () => results.push('And I am also here'));
+        process.on('unhandledRejection', () => results.push('one'));
+        process.on('unhandledRejection', () => results.push('two'));
         expect(process.listeners('unhandledRejection')).toHaveLength(existing.length + 2);
         new Custodian(process, 'unhandledRejection').mount();
         expect(process.listeners('unhandledRejection')).toHaveLength(1);
@@ -257,19 +257,32 @@ describe('event-custodian', () => {
 
     test('function chaining', () => {
         const emitter = new EventEmitter();
-        emitter.on('event', () => results.push('I am here'))
-            .on('event', () => results.push('And I am also here'));
+        emitter.on('event', () => results.push('one'))
+            .on('event', () => results.push('two'));
         new Custodian(emitter, 'event').mount();
 
         emitter.removeAllListeners('event')
-            .on('event', () => results.push('I am last'))
-            .prependListener('event', () => results.push('I am first'))
+            .on('event', () => results.push('three'))
+            .prependListener('event', () => results.push('zero'))
         ;
 
         emitter.emit('event');
         expect(results).toEqual([
-            'I am first',
-            'I am last'
+            'zero',
+            'three'
+        ]);
+    });
+
+    test('does not break other event listeners', () => {
+        const emitter = new EventEmitter();
+        new Custodian(emitter, 'event').mount();
+        emitter.on('event', () => results.push('one'));
+        emitter.on('another-event', () => results.push('two'));
+        emitter.emit('event');
+        emitter.emit('another-event');
+        expect(results).toEqual([
+            'one',
+            'two'
         ]);
     });
 });
