@@ -1,13 +1,14 @@
 {
   "name": "event-custodian",
-  "version": "0.0.0",
-  "description": "Take responsibility for listeners on event emitter and look after them",
+  "version": "1.0.0",
+  "description": "📆 Take responsibility for listeners on event emitter and look after them",
   "keywords": [
     "EventEmitter",
     "listeners",
     "handlers",
     "process",
     "unhandledRejection",
+    "Custodian",
     "📆"
   ],
   "author": "Fiverr SRE",
@@ -24,7 +25,6 @@
   },
   "devDependencies": {
     "@fiverr/eslint-config-fiverr": "^3.2.0",
-    "@lets/wait": "^2.0.2",
     "eslint": "^7.9.0",
     "eslint-plugin-log": "^1.2.6",
     "jest": "^26.4.2"
